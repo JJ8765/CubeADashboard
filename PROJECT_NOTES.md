@@ -111,14 +111,25 @@ file itself). See `src/domain/layout/floorplan.ts`.
 
 - [x] Data model, parsers, calc engine, repository, sample seed
 - [x] Reconciliation tests vs. workbook Summary (32 tests passing)
-- [x] Foundation screen (live reconciliation)
 - [x] CAD-derived floor geometry model (`floorplan.ts`); bays carry `x/y/w/h`
+- [x] Interactive layout map (pan/zoom, hover-glow, select, color-by util/zone/dept/rack)
+- [x] Rack detail panel + assignment (department + storage type + notes, live recalc)
+- [x] Dashboard (KPI cards, Recharts, high/low-util tables)
+- [x] Search + filters (zone / assignment / rack / utilization) with highlight-and-dim
+- [x] Verify tab (live workbook reconciliation)
 - [ ] Import/Export screen (upload workbook + inventory; export xlsx/csv; reset)
-- [ ] Interactive layout map (pan/zoom, hover-glow, select, "Color/Measure by")
-- [ ] Rack detail panel + assignment (single + bulk)
-- [ ] Dashboard (KPI cards, Recharts, high/low-util tables)
-- [ ] Capacity table + filters + search-to-highlight
+- [ ] Bulk assignment (apply to all matching)
 - [ ] Data-Mapping / Settings (rack→category→factor, color thresholds)
 
-The approved dark "control-room" UI direction is captured in the interactive
-mockup shared during planning.
+### Real-file validation (7/2026 data drop)
+
+Confirmed the model against the three real exports:
+- **Inv Valuation Detail (7.17.26)** — Building A: **550,673 ft³** occupied over
+  **17,331** locations; occupied cube = `Quantity × Volume(ft³)`; Location Type
+  RTL/WHL/PRT/PRW/D/PLT/NON maps to the app's zones. Matches the design figures.
+- **Formula DC Valuation (.xlsb ×2)** — $-only pivots (Ext Units/Cost/Price, no
+  cube). Bldg A Ext Cost $45.1M (7/02) → $60.3M (detail 7/17) → $63.7M (7/20):
+  a consistent, growing trend. Value/trend overlay only, as planned.
+
+The approved dark "control-room" UI direction is realized in the Layout +
+Dashboard screens.

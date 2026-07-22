@@ -106,15 +106,25 @@ export function buildSampleModel(): WarehouseModel {
   // real-world x/y/w/h rectangle for each bay as it is emitted.
   const allocators = makeAllocators();
 
+  // Per-zone running counter so every bay gets a UNIQUE physical address. Using a
+  // per-code index here would reset to 0 for each rack code, colliding on the same
+  // (aisle,bay,level,position) key across codes — which makes the occupancy join
+  // over-attribute the same cube to many bays (e.g. MODs > 100%). One counter per
+  // zone keeps location keys 1:1 with bays.
+  const zoneSeq: Record<string, number> = {};
+
   const emit = (zone: Bay["zone"], code: string, count: number, aislePrefix: string) => {
     for (let i = 0; i < count; i++) {
-      const aisle = `${aislePrefix}${String(Math.floor(i / 14) + 1).padStart(3, "0")}`;
-      const level = "ABCDEF"[i % 6];
-      const position = String((i % 2) + 1);
+      const n = zoneSeq[zone] ?? 0;
+      zoneSeq[zone] = n + 1;
+      const aisle = `${aislePrefix}${String(Math.floor(n / 14) + 1).padStart(3, "0")}`;
+      const level = "ABCDEF"[n % 6];
+      const position = String((n % 2) + 1);
+      const bayNo = String(n);
       const id = `${zone[0]}-${code}-${i}`;
       const g = allocators[zone]?.next();
       bays.push({
-        id, zone, rackCode: code, aisle, bay: String(i), level, position,
+        id, zone, rackCode: code, aisle, bay: bayNo, level, position,
         source: "excel+cad",
         x: g?.x, y: g?.y, w: g?.w, h: g?.h,
       });
@@ -127,8 +137,8 @@ export function buildSampleModel(): WarehouseModel {
         const capIn = profiles[code].bayVolumeIn;
         const occFt = (capIn / 1728) * (0.05 + rnd() * 0.4);
         occupancy.push({
-          key: locationKey(aisle, String(i), level, position),
-          aisle, bay: String(i), level, position,
+          key: locationKey(aisle, bayNo, level, position),
+          aisle, bay: bayNo, level, position,
           locationType: zone === "Retail" ? "RTL" : zone === "Wholesale" ? "WHL" : "D",
           locationClass: "Reserve Location",
           productDivision: assignments[id]?.department,
