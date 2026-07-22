@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vite
+*.tsbuildinfo
+
+# Never commit proprietary source workbooks / inventory exports.
+# These are uploaded into the app at runtime, not stored in the repo.
+*.xlsb
+*.xlsx
+*.xls
+!src/**/*.sample.*
+data/
+uploads/
