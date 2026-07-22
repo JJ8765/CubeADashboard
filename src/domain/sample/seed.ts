@@ -12,7 +12,7 @@
 
 import { makeRackProfile } from "../calc/capacity";
 import { locationKey } from "../calc/occupancy";
-import { makeAllocators } from "../layout/floorplan";
+import { buildGridBays, modBayGeometry } from "../layout/floorplan";
 import type {
   Bay,
   InventorySnapshot,
@@ -43,15 +43,8 @@ const FACTOR_DATA: Array<[string, number, number]> = [
   ["MODs", 0.64792, 0.63524],
 ];
 
-// --- REAL per-code bay counts (COUNTIF over each grid) -----------------------
-const RETAIL_COUNTS: Record<string, number> = {
-  A1: 1513, A4: 150, AT: 16, A4S: 6, R1: 72, R4: 8, G1: 24, G4: 6,
-  B1: 72, B4: 6, Y1: 18, Y3: 78, L1: 16, L4: 2, E: 22, E2: 1,
-};
-const WHOLESALE_COUNTS: Record<string, number> = {
-  A1: 1217, A4: 68, A4W: 19, R1: 56, R4: 4, X1: 154, X4: 11, Z1: 287, Z4: 13, E: 47, E2: 4,
-};
-const DOCK_COUNTS: Record<string, number> = { DR: 43 };
+// Per-code bay counts (COUNTIF over each grid) now come straight from the real
+// workbook layout via buildGridBays() — see src/domain/layout/gridData.ts.
 
 // --- REAL MOD level cubes (in³), one synthetic "bay" per level ---------------
 const MOD_LEVELS: Array<[string, number]> = [
@@ -102,57 +95,63 @@ export function buildSampleModel(): WarehouseModel {
   const occupancy: LocationOccupancy[] = [];
   const assignments: WarehouseModel["assignments"] = {};
 
-  // CAD/Excel-derived floor geometry: one allocator per zone hands out the
-  // real-world x/y/w/h rectangle for each bay as it is emitted.
-  const allocators = makeAllocators();
+  const locTypeFor = (zone: string): string =>
+    zone === "Retail" ? "RTL" : zone === "Wholesale" ? "WHL" : "D";
 
-  // Per-zone running counter so every bay gets a UNIQUE physical address. Using a
-  // per-code index here would reset to 0 for each rack code, colliding on the same
-  // (aisle,bay,level,position) key across codes — which makes the occupancy join
-  // over-attribute the same cube to many bays (e.g. MODs > 100%). One counter per
-  // zone keeps location keys 1:1 with bays.
-  const zoneSeq: Record<string, number> = {};
-
-  const emit = (zone: Bay["zone"], code: string, count: number, aislePrefix: string) => {
-    for (let i = 0; i < count; i++) {
-      const n = zoneSeq[zone] ?? 0;
-      zoneSeq[zone] = n + 1;
-      const aisle = `${aislePrefix}${String(Math.floor(n / 14) + 1).padStart(3, "0")}`;
-      const level = "ABCDEF"[n % 6];
-      const position = String((n % 2) + 1);
-      const bayNo = String(n);
-      const id = `${zone[0]}-${code}-${i}`;
-      const g = allocators[zone]?.next();
-      bays.push({
-        id, zone, rackCode: code, aisle, bay: bayNo, level, position,
-        source: "excel+cad",
-        x: g?.x, y: g?.y, w: g?.w, h: g?.h,
+  // Attach synthetic occupancy + a sample department to one bay, then record it.
+  // Every bay's (aisle,bay,level,position) key is unique, so the occupancy join is
+  // 1:1 (no over-attribution).
+  const addBay = (b: {
+    id: string; zone: Bay["zone"]; rackCode: string;
+    aisle: string; bay: string; level: string; position: string;
+    x?: number; y?: number; w?: number; h?: number;
+  }) => {
+    bays.push({
+      id: b.id, zone: b.zone, rackCode: b.rackCode,
+      aisle: b.aisle, bay: b.bay, level: b.level, position: b.position,
+      source: "excel+cad", x: b.x, y: b.y, w: b.w, h: b.h,
+    });
+    // ~60% of bays assigned to a department (sample)
+    if (rnd() < 0.6) assignments[b.id] = { bayId: b.id, department: DEPARTMENTS[Math.floor(rnd() * DEPARTMENTS.length)] };
+    // synthetic occupancy: fill a fraction of capacity (product cube runs low)
+    if (rnd() < 0.62) {
+      const capIn = profiles[b.rackCode]?.bayVolumeIn ?? 0;
+      const occFt = (capIn / 1728) * (0.05 + rnd() * 0.4);
+      occupancy.push({
+        key: locationKey(b.aisle, b.bay, b.level, b.position),
+        aisle: b.aisle, bay: b.bay, level: b.level, position: b.position,
+        locationType: locTypeFor(b.zone),
+        locationClass: "Reserve Location",
+        productDivision: assignments[b.id]?.department,
+        occupiedCubicFt: occFt,
+        units: Math.round(occFt * 4),
       });
-
-      // ~60% of bays assigned to a department (sample)
-      if (rnd() < 0.6) assignments[id] = { bayId: id, department: DEPARTMENTS[Math.floor(rnd() * DEPARTMENTS.length)] };
-
-      // synthetic occupancy: fill a fraction of capacity (product cube runs low)
-      if (rnd() < 0.62) {
-        const capIn = profiles[code].bayVolumeIn;
-        const occFt = (capIn / 1728) * (0.05 + rnd() * 0.4);
-        occupancy.push({
-          key: locationKey(aisle, bayNo, level, position),
-          aisle, bay: bayNo, level, position,
-          locationType: zone === "Retail" ? "RTL" : zone === "Wholesale" ? "WHL" : "D",
-          locationClass: "Reserve Location",
-          productDivision: assignments[id]?.department,
-          occupiedCubicFt: occFt,
-          units: Math.round(occFt * 4),
-        });
-      }
     }
   };
 
-  for (const [code, n] of Object.entries(RETAIL_COUNTS)) emit("Retail", code, n, "6");
-  for (const [code, n] of Object.entries(WHOLESALE_COUNTS)) emit("Wholesale", code, n, "0");
-  for (const [code, n] of Object.entries(DOCK_COUNTS)) emit("Dock", code, n, "D");
-  for (const [code] of MOD_LEVELS) emit("MODs", code, 1, "M");
+  // Grid-backed zones (Retail / Wholesale / Dock): bays come straight from the
+  // workbook layout, so each carries its REAL aisle number and grid position.
+  const gridSeq: Record<string, number> = {};
+  for (const gb of buildGridBays()) {
+    const n = gridSeq[gb.zone] ?? 0;
+    gridSeq[gb.zone] = n + 1;
+    addBay({
+      id: `${gb.zone[0]}-${gb.rackCode}-${n}`,
+      zone: gb.zone, rackCode: gb.rackCode,
+      aisle: gb.aisle, bay: gb.bay, level: "1", position: gb.position,
+      x: gb.x, y: gb.y, w: gb.w, h: gb.h,
+    });
+  }
+
+  // MODs have no workbook grid (module-level cubes); place them in their own row.
+  MOD_LEVELS.forEach(([code], i) => {
+    const g = modBayGeometry(i, MOD_LEVELS.length);
+    addBay({
+      id: `M-${code}-0`, zone: "MODs", rackCode: code,
+      aisle: "MOD", bay: String(i), level: "1", position: "1",
+      x: g.x, y: g.y, w: g.w, h: g.h,
+    });
+  });
 
   const inventory: InventorySnapshot = {
     label: "SAMPLE occupancy (synthetic)",
