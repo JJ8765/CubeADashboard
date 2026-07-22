@@ -62,9 +62,15 @@ the rate table defines others.
   product cube. Enables **true utilization = occupied ÷ capacity**.
 - **`Formula DC Valuation by Building.xlsb` (×2 dates)** — $-valuation pivot
   summaries (Ext Units/Cost/Price). No cube. Optional value + trend overlay only.
-- **CAD floor plan (SVG, pending)** — geometry base for the map (true rack
-  positions). Excel remains the data master; where CAD and Excel disagree on
-  which racks exist, Excel wins. (Note: two Aisle 24s in Wholesale are real.)
+- **CAD floor plan (`Building_A_7726_Editing.dwg`)** — geometry reference for the
+  map. **Measured, not embedded:** the DWG (AutoCAD 2018, 317 layers) was read
+  with LibreDWG → DXF → ezdxf, the true dimensions extracted, and the layout
+  **rebuilt natively** in `src/domain/layout/floorplan.ts` so the app ships clean
+  vector geometry instead of a 30 MB drawing export. Measured truths (units =
+  inches): structural column grid **52 ft × 50 ft** on centre; rack floor extents
+  **≈ 1847 ft (E–W) × ≈ 625 ft (N–S)**. Excel remains the data master; where CAD
+  and Excel disagree on which racks exist, Excel wins. (Note: two Aisle 24s in
+  Wholesale are real.)
 
 ## 3. Data model
 
@@ -82,22 +88,32 @@ Defined in `src/domain/types.ts`:
 **Two masters, resolved:** Excel = data (existence, capacity); CAD = geometry
 (positions). Inventory = occupancy. Valuation = optional overlay.
 
-## 4. Layout conversion plan
+## 4. Layout / geometry model
 
-1. Excel grids → `Bay[]` with `source: "excel"` (done — no geometry yet).
-2. When the CAD SVG arrives: extract rack rectangles/positions → attach `x/y/w/h`
-   to bays (`source: "excel+cad"`); Excel-only bays kept and flagged; CAD-only
-   shapes rendered as non-capacity building features.
-3. Render as an SVG map: Wholesale (left) + Retail (right) as one continuous
-   building; each bay hover/click/selectable at true resolution.
+The floor geometry is our **own native model**, rebuilt from the CAD (not the CAD
+file itself). See `src/domain/layout/floorplan.ts`.
+
+- **Division of truth:** CAD → true scale + footprint + column grid (measured in
+  inches, expressed in feet); Excel → bay dimensions (nominal 8 ft × 3.5 ft) and
+  the relative layout / per-code counts.
+- **Model:** building footprint `1850 × 625 ft`; four zone rectangles placed per
+  the CAD arrangement (Retail west, Wholesale east, MODs high/centre, Dock along
+  the south edge). A per-zone `ZoneAllocator` fills each region with bays in
+  aisle-and-row order (18 ft row pitch), emitting a real-world `x/y/w/h` rectangle
+  per bay. The sample seed now tags bays `source: "excel+cad"`.
+- **Coordinates** are feet, origin at the building SW corner, +x = east, +y =
+  north. Real uploads can later carry exact per-bay CAD coordinates; this native
+  model is the schematic baseline the map renders against.
+- Covered by `tests/floorplan.test.ts` (geometry present, in-footprint, in-zone);
+  capacity numbers are unchanged (`tests/reconcile.test.ts`).
 
 ## 5. Roadmap
 
 - [x] Data model, parsers, calc engine, repository, sample seed
-- [x] Reconciliation tests vs. workbook Summary (27 tests passing)
+- [x] Reconciliation tests vs. workbook Summary (32 tests passing)
 - [x] Foundation screen (live reconciliation)
+- [x] CAD-derived floor geometry model (`floorplan.ts`); bays carry `x/y/w/h`
 - [ ] Import/Export screen (upload workbook + inventory; export xlsx/csv; reset)
-- [ ] CAD SVG → bay geometry loader
 - [ ] Interactive layout map (pan/zoom, hover-glow, select, "Color/Measure by")
 - [ ] Rack detail panel + assignment (single + bulk)
 - [ ] Dashboard (KPI cards, Recharts, high/low-util tables)

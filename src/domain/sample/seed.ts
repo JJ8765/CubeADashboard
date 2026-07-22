@@ -12,6 +12,7 @@
 
 import { makeRackProfile } from "../calc/capacity";
 import { locationKey } from "../calc/occupancy";
+import { makeAllocators } from "../layout/floorplan";
 import type {
   Bay,
   InventorySnapshot,
@@ -101,13 +102,22 @@ export function buildSampleModel(): WarehouseModel {
   const occupancy: LocationOccupancy[] = [];
   const assignments: WarehouseModel["assignments"] = {};
 
+  // CAD/Excel-derived floor geometry: one allocator per zone hands out the
+  // real-world x/y/w/h rectangle for each bay as it is emitted.
+  const allocators = makeAllocators();
+
   const emit = (zone: Bay["zone"], code: string, count: number, aislePrefix: string) => {
     for (let i = 0; i < count; i++) {
       const aisle = `${aislePrefix}${String(Math.floor(i / 14) + 1).padStart(3, "0")}`;
       const level = "ABCDEF"[i % 6];
       const position = String((i % 2) + 1);
       const id = `${zone[0]}-${code}-${i}`;
-      bays.push({ id, zone, rackCode: code, aisle, bay: String(i), level, position, source: "excel" });
+      const g = allocators[zone]?.next();
+      bays.push({
+        id, zone, rackCode: code, aisle, bay: String(i), level, position,
+        source: "excel+cad",
+        x: g?.x, y: g?.y, w: g?.w, h: g?.h,
+      });
 
       // ~60% of bays assigned to a department (sample)
       if (rnd() < 0.6) assignments[id] = { bayId: id, department: DEPARTMENTS[Math.floor(rnd() * DEPARTMENTS.length)] };
