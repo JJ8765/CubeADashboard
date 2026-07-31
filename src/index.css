@@ -14,10 +14,11 @@ body,
 
 body {
   margin: 0;
+  /* Deep-water backdrop for the fish game. */
   background:
-    radial-gradient(1200px 700px at 78% -10%, #0d2733 0%, transparent 55%),
-    radial-gradient(900px 600px at 0% 110%, #10202e 0%, transparent 50%),
-    #080b11;
+    radial-gradient(1100px 700px at 50% -10%, #0e4a63 0%, transparent 60%),
+    radial-gradient(900px 600px at 0% 110%, #072736 0%, transparent 55%),
+    #04121b;
   color: #e8eef7;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
