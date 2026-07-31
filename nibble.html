@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nibble — a fish's tale</title>
+    <style>
+      /*
+        Nibble — standalone, no-build version.
+        Single self-contained HTML file: inline CSS + vanilla JS + inline SVG,
+        no dependencies and no network requests. Ported 1:1 from the React game
+        in src/game (same baits, abilities, and loop rules).
+      */
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :root { color-scheme: dark; }
+      html, body { height: 100%; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        color: #e8eef7;
+        background:
+          radial-gradient(1100px 700px at 50% -10%, #0e4a63 0%, transparent 60%),
+          radial-gradient(900px 600px at 0% 110%, #072736 0%, transparent 55%),
+          #04121b;
+      }
+      .mono { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; }
+
+      #app { max-width: 1024px; height: 100%; margin: 0 auto; padding: 20px;
+             display: flex; flex-direction: column; }
+      @media (max-width: 640px) { #app { padding: 12px; } }
+
+      .screen {
+        position: relative; flex: 1; min-height: 0; overflow: hidden;
+        border-radius: 18px; border: 1px solid rgba(165, 243, 252, 0.1);
+      }
+      .screen.pond { background: linear-gradient(to bottom, #155e75, #0e4a63 55%, #082f43); }
+      .screen.title { background: linear-gradient(to bottom, #155e75, #0e4a63 55%, #082f43);
+        display: grid; place-items: center; text-align: center; }
+      .screen.boss { background: linear-gradient(to bottom, #3a1d2b, #241b2e 55%, #0d1420);
+        display: grid; place-items: center; text-align: center;
+        border-color: rgba(248, 113, 113, 0.2); }
+      .screen.over { background: linear-gradient(to bottom, #0a1a24, #05070d);
+        display: grid; place-items: center; text-align: center; }
+
+      .center-col { position: relative; z-index: 5; display: flex; flex-direction: column;
+        align-items: center; gap: 20px; padding: 24px; max-width: 520px; }
+
+      h1.logo { font-size: 56px; font-weight: 900; letter-spacing: -1px; color: #fff;
+        text-shadow: 0 3px 0 rgba(0,0,0,0.3); }
+      .lede { font-size: 14px; color: rgba(207, 250, 254, 0.8); line-height: 1.5; }
+      .sus { color: #fca5a5; }
+      .rules { display: flex; flex-direction: column; gap: 4px; font-size: 12px;
+        color: rgba(207, 250, 254, 0.7); }
+
+      button.big {
+        margin-top: 8px; border-radius: 999px; border: 2px solid #fde047;
+        background: rgba(253, 224, 71, 0.1); color: #fde047; cursor: pointer;
+        padding: 12px 32px; font-size: 18px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 1px; transition: all .15s; }
+      button.big:hover { background: #fde047; color: #000; }
+      button.big.cyan { border-color: #67e8f9; background: rgba(103, 232, 249, .1); color: #67e8f9; }
+      button.big.cyan:hover { background: #67e8f9; color: #000; }
+      button.big.red { border-color: #fca5a5; background: rgba(252, 165, 165, .1); color: #fca5a5; }
+      button.big.red:hover { background: #fca5a5; color: #000; }
+
+      /* ---- play screen ---- */
+      .play { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+      .hud-wrap { border-radius: 12px; border: 1px solid rgba(255,255,255,.1);
+        background: rgba(0,0,0,.25); padding: 12px; backdrop-filter: blur(3px); }
+      .hud { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+      .hud .meter { flex: 1; min-width: 220px; }
+      .hud .meter .lbl { display: flex; justify-content: space-between; font-size: 12px;
+        font-weight: 600; color: rgba(255,255,255,.8); margin-bottom: 4px; }
+      .bar { height: 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25);
+        background: rgba(0,0,0,.4); overflow: hidden; }
+      .bar > span { display: block; height: 100%; border-radius: 999px; transition: all .3s; }
+      .fill-hi { background: #34d399; } .fill-mid { background: #fbbf24; } .fill-lo { background: #ef4444; }
+      .count { text-align: center; }
+      .count .n { font-size: 26px; font-weight: 700; color: #fff; }
+      .count .c { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: rgba(255,255,255,.6); }
+      .powers { display: flex; align-items: center; gap: 8px; }
+      .powers .none { font-size: 12px; color: rgba(255,255,255,.4); }
+      .badge { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px;
+        border: 1px solid rgba(103, 232, 249, .5); background: rgba(34, 211, 238, .1);
+        color: #a5f3fc; font-size: 18px; cursor: default; }
+
+      .pond-area { position: relative; flex: 1; min-height: 0; overflow: hidden;
+        border-radius: 16px; border: 1px solid rgba(165, 243, 252, .1);
+        background: linear-gradient(to bottom, #155e75, #0e4a63 55%, #082f43); }
+
+      .fish { position: absolute; left: 24px; top: 50%; transform: translateY(-50%);
+        animation: fishbob 3s ease-in-out infinite; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
+
+      .worm { position: absolute; transform: translate(-50%, -50%); border: none; background: none;
+        cursor: pointer; padding: 8px; border-radius: 999px; transition: transform .15s; }
+      .worm:hover { transform: translate(-50%, -50%) scale(1.1); }
+      .worm.sel { transform: translate(-50%, -50%) scale(1.25);
+        filter: drop-shadow(0 0 10px rgba(255,255,255,.6)); }
+      .worm .wig { animation: wormwiggle 1.6s ease-in-out infinite; }
+      .worm .warn { position: absolute; right: -2px; top: -2px; background: #ef4444; color: #fff;
+        border-radius: 999px; font-size: 9px; font-weight: 700; padding: 0 5px; line-height: 16px; }
+
+      /* dialog box (Undertale style) */
+      .dialog { margin: 0 auto; width: 100%; max-width: 640px; border-radius: 6px;
+        border: 4px solid #fff; background: #000; padding: 16px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; color: #fff;
+        box-shadow: 0 0 0 4px rgba(0,0,0,.4); }
+      .dialog p { min-height: 40px; line-height: 1.6; }
+      .caret { display: inline-block; width: 8px; margin-left: 2px; animation: blink 1s step-start infinite; }
+      .actions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 12px;
+        border-top: 1px solid rgba(255,255,255,.25); padding-top: 12px; }
+      .actions button { border-radius: 4px; border: 2px solid; background: none; cursor: pointer;
+        padding: 6px 20px; font-size: 13px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 1px; transition: all .12s; font-family: inherit; }
+      .actions .eat { border-color: #fde047; color: #fde047; }
+      .actions .eat:hover { background: #fde047; color: #000; }
+      .actions .leave { border-color: rgba(255,255,255,.7); color: rgba(255,255,255,.9); }
+      .actions .leave:hover { background: #fff; color: #000; }
+
+      /* scenery */
+      .scenery { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+      .rays { position: absolute; inset: 0; background: linear-gradient(105deg,
+        rgba(255,255,255,.06) 0%, transparent 18%, transparent 82%, rgba(255,255,255,.05) 100%); }
+      .bubble { position: absolute; bottom: 0; border-radius: 999px; background: rgba(255,255,255,.25);
+        animation: bubble 8s linear infinite; }
+      .weed { position: absolute; bottom: 0; transform-origin: bottom; animation: sway 4s ease-in-out infinite; }
+      .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 40px;
+        background: linear-gradient(to top, #123043, transparent); }
+      .sparkle { animation: sparkle 1.4s ease-in-out infinite; }
+
+      .stat-box { border-radius: 10px; border: 1px solid rgba(255,255,255,.15);
+        background: rgba(255,255,255,.05); padding: 12px 24px; }
+      .stat-box .n { font-size: 30px; font-weight: 700; color: #a5f3fc; }
+      .stat-box .c { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: rgba(255,255,255,.5); }
+      .big-emoji { font-size: 60px; }
+      h2.big { font-size: 34px; font-weight: 900; text-transform: uppercase; letter-spacing: -1px; }
+      .boss-name { color: #fecaca; } .over-title { color: #fff; }
+      .boss-quote { font-size: 14px; font-style: italic; color: rgba(254, 226, 226, .8); }
+      .hint { font-size: 12px; color: rgba(255,255,255,.4); }
+      .death-msg { font-size: 13px; color: rgba(255,255,255,.7); }
+
+      @keyframes fishbob { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-8px) rotate(1deg); } }
+      @keyframes wormwiggle { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+      @keyframes bubble { 0% { transform: translateY(0) scale(.6); opacity: 0; } 20% { opacity: .6; } 100% { transform: translateY(-110vh) scale(1); opacity: 0; } }
+      @keyframes sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+      @keyframes sparkle { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+      @keyframes blink { 50% { opacity: 0; } }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script>
+      "use strict";
+
+      // ---------------------------------------------------------------------
+      // Data — mirrors src/game/data/baits.ts and abilities.ts (same numbers).
+      // ---------------------------------------------------------------------
+      const BAITS = [
+        { id: "garden", name: "Garden Worm", flavor: "A plain, honest worm. It wiggles without a care in the world.", hungerRestore: 14, hookChance: 0.08, color: "#d98a6a", weight: 10 },
+        { id: "grub",   name: "Fat Grub",    flavor: "Plump and glistening. Practically a whole meal on its own.",   hungerRestore: 28, hookChance: 0.14, color: "#e8c07d", weight: 6 },
+        { id: "bubble", name: "Bubble Worm", flavor: "It's mostly air, but it tickles going down. Hee hee.",         hungerRestore: 9,  hookChance: 0.05, color: "#8fd3e8", weight: 7 },
+        { id: "neon",   name: "Neon Wiggler",flavor: "Suspiciously bright. Tastes like blue raspberry and static.",  hungerRestore: 22, hookChance: 0.20, color: "#7cf29b", weight: 4, special: true },
+        { id: "glow",   name: "Glow Worm",   flavor: "A soft lantern in the dark. Warm, calm, and very filling.",    hungerRestore: 34, hookChance: 0.12, color: "#f4e07a", weight: 3, special: true },
+        { id: "rusty",  name: "Rusty Lure",  flavor: "It smells like a meal and a mistake. Something metallic glints.", hungerRestore: 40, hookChance: 0.72, color: "#c46a58", weight: 4 },
+      ];
+      const TOTAL_WEIGHT = BAITS.reduce((s, b) => s + b.weight, 0);
+      function pickBait() {
+        let roll = Math.random() * TOTAL_WEIGHT;
+        for (const b of BAITS) { roll -= b.weight; if (roll <= 0) return b; }
+        return BAITS[0];
+      }
+
+      const ABILITIES = [
+        { id: "hookSense",    name: "Hook Sense",    description: "Inspecting a worm reveals whether a hook is hidden inside before you bite.", unlockAtWorms: 3, icon: "◎" },
+        { id: "biggerBelly",  name: "Bigger Belly",  description: "Your stomach stretches — hold more food before you're full.",               unlockAtWorms: 6, icon: "◍" },
+        { id: "secondChance", name: "Second Chance", description: "Wriggle free the first time you're hooked. Once per life.",                  unlockAtWorms: 9, icon: "✦" },
+      ];
+      const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map((a) => [a.id, a]));
+      const BIGGER_BELLY_BONUS = 40;
+
+      // ---------------------------------------------------------------------
+      // Rules — mirrors src/game/engine/logic.ts.
+      // ---------------------------------------------------------------------
+      const CONFIG = { hungerStart: 55, hungerBaseMax: 100, hungerDecayPerTick: 3, pondSize: 4, wormsPerBoss: 10 };
+
+      const maxHungerFor = (ab) => CONFIG.hungerBaseMax + (ab.includes("biggerBelly") ? BIGGER_BELLY_BONUS : 0);
+      const unlockedAbilitiesFor = (n) => ABILITIES.filter((a) => n >= a.unlockAtWorms).map((a) => a.id);
+      function newlyUnlocked(prev, next) {
+        const before = new Set(unlockedAbilitiesFor(prev));
+        return unlockedAbilitiesFor(next).filter((id) => !before.has(id));
+      }
+      const isBossDue = (n) => n > 0 && n % CONFIG.wormsPerBoss === 0;
+
+      function applyEat(state, worm) {
+        if (worm.hooked) {
+          const canEscape = state.abilities.includes("secondChance") && !state.secondChanceUsed;
+          if (canEscape) {
+            return { ...state, secondChanceUsed: true, savedByChance: true, death: null,
+              message: "A hook! You thrash and — snap! You wriggle free, just once." };
+          }
+          return { ...state, death: "hooked",
+            message: "A hook bites deep. You're reeled up toward the light…" };
+        }
+        const nextCount = state.wormsEaten + 1;
+        const fresh = newlyUnlocked(state.wormsEaten, nextCount);
+        const abilities = fresh.length ? unlockedAbilitiesFor(nextCount) : state.abilities;
+        const hungerMax = maxHungerFor(abilities);
+        const hunger = Math.min(hungerMax, state.hunger + worm.bait.hungerRestore);
+        return { ...state, hunger, hungerMax, wormsEaten: nextCount, abilities, death: null,
+          newAbilities: fresh, bossDue: isBossDue(nextCount),
+          message: "You gulp down the " + worm.bait.name + ". " + worm.bait.flavor };
+      }
+      function applyTick(hunger) {
+        const h = Math.max(0, hunger - CONFIG.hungerDecayPerTick);
+        return { hunger: h, death: h <= 0 ? "starve" : null };
+      }
+
+      // ---------------------------------------------------------------------
+      // State + worm field.
+      // ---------------------------------------------------------------------
+      let uidSeq = 0;
+      function makeWorm() {
+        const bait = pickBait();
+        return { uid: "w" + uidSeq++, bait, hooked: Math.random() < bait.hookChance,
+          x: 12 + Math.random() * 76, y: 18 + Math.random() * 60, phase: (Math.random() * 2).toFixed(2) };
+      }
+      function fillPond(worms) {
+        const next = worms.slice();
+        while (next.length < CONFIG.pondSize) next.push(makeWorm());
+        return next;
+      }
+      function initialState() {
+        return { phase: "start", hunger: CONFIG.hungerStart, hungerMax: maxHungerFor([]),
+          wormsEaten: 0, abilities: [], worms: [], inspecting: null, deathCause: null,
+          message: "", secondChanceUsed: false };
+      }
+      let S = initialState();
+      let tickTimer = null;
+
+      function startTick() {
+        stopTick();
+        tickTimer = window.setInterval(() => {
+          if (S.phase !== "playing") return;
+          const { hunger, death } = applyTick(S.hunger);
+          if (death) { S.phase = "gameover"; S.deathCause = death; S.hunger = hunger; S.inspecting = null; stopTick(); render(); return; }
+          S.hunger = hunger; renderHud();
+        }, 1000);
+      }
+      function stopTick() { if (tickTimer) { clearInterval(tickTimer); tickTimer = null; } }
+
+      // ---- actions ----
+      function startGame() {
+        S = initialState(); S.phase = "playing"; S.worms = fillPond([]);
+        S.message = "You slip into the cool water. Something wriggles nearby…";
+        startTick(); render();
+      }
+      function inspectWorm(uid) {
+        const w = S.worms.find((x) => x.uid === uid); if (!w) return;
+        S.inspecting = uid; S.message = w.bait.flavor; render();
+      }
+      function eatWorm(uid) {
+        if (S.phase !== "playing") return;
+        const w = S.worms.find((x) => x.uid === uid); if (!w) return;
+        const out = applyEat(S, w);
+        const remaining = S.worms.filter((x) => x.uid !== uid);
+        if (out.death) { S = { ...out, phase: "gameover", deathCause: out.death, inspecting: null }; stopTick(); render(); return; }
+        S = { ...out, inspecting: null, worms: fillPond(remaining),
+          phase: out.bossDue ? "boss" : "playing" };
+        if (S.phase === "boss") stopTick();
+        render();
+      }
+      function leaveWorm(uid) {
+        S.inspecting = null;
+        S.worms = fillPond(S.worms.filter((x) => x.uid !== uid));
+        S.message = "You let it drift away. Best not to be greedy.";
+        render();
+      }
+      function advancePastBoss() {
+        S.phase = "playing"; S.message = "Jordan's boat drifts off… for now. Keep eating.";
+        startTick(); render();
+      }
+      function restart() { S = initialState(); render(); }
+
+      // ---------------------------------------------------------------------
+      // SVG art — mirrors src/game/art + WormSprite.
+      // ---------------------------------------------------------------------
+      function fishSVG(size, eating) {
+        const mouth = eating
+          ? '<ellipse cx="88" cy="41" rx="4" ry="5" fill="#7a3b3b" />'
+          : '<path d="M84 41 Q88 44 91 41" stroke="#c25a3a" stroke-width="2" fill="none" stroke-linecap="round" />';
+        return '<svg width="' + size + '" height="' + (size * 0.72) + '" viewBox="0 0 100 72" aria-label="a cute fish">' +
+          '<path d="M14 36 L1 22 Q6 36 1 50 Z" fill="#ff9e6d" stroke="#e07a44" stroke-width="2" stroke-linejoin="round"/>' +
+          '<ellipse cx="52" cy="36" rx="38" ry="24" fill="#ffb27d" stroke="#e07a44" stroke-width="2"/>' +
+          '<path d="M40 14 Q52 2 64 15 Z" fill="#ff9e6d" stroke="#e07a44" stroke-width="2" stroke-linejoin="round"/>' +
+          '<ellipse cx="52" cy="46" rx="26" ry="11" fill="#ffd1a8" opacity="0.7"/>' +
+          '<circle cx="74" cy="42" r="5" fill="#ff8fb0" opacity="0.6"/>' +
+          '<circle cx="76" cy="30" r="7" fill="#fff" stroke="#e07a44" stroke-width="1.5"/>' +
+          '<circle cx="78" cy="31" r="3.4" fill="#2a2440"/>' +
+          '<circle cx="79.4" cy="29.6" r="1.1" fill="#fff"/>' + mouth + '</svg>';
+      }
+      function wormSVG(worm, danger) {
+        const hookMark = danger
+          ? '<path d="M40 4 q7 0 7 8 q0 6 -6 6" fill="none" stroke="#e5e7eb" stroke-width="2.5" stroke-linecap="round"/>' +
+            '<line x1="40" y1="1" x2="40" y2="5" stroke="#cbd5e1" stroke-width="1.5"/>'
+          : "";
+        const spark = worm.bait.special
+          ? '<text x="30" y="9" font-size="9" class="sparkle">✦</text>' : "";
+        return '<svg width="52" height="30" viewBox="0 0 52 30">' + hookMark +
+          '<path d="M6 15 q6 -9 12 0 q6 9 12 0 q4 -6 9 -3" fill="none" stroke="' + worm.bait.color + '" stroke-width="8" stroke-linecap="round"/>' +
+          '<circle cx="6" cy="15" r="5" fill="' + worm.bait.color + '"/>' +
+          '<circle cx="4.5" cy="13.5" r="1.3" fill="#2a2440"/>' + spark + '</svg>';
+      }
+      function jordanSVG() {
+        return '<svg width="150" height="150" viewBox="0 0 120 120" aria-label="Jordan the Fisherman">' +
+          '<circle cx="60" cy="40" r="22" fill="#e8b98f" stroke="#2a2440" stroke-width="3"/>' +
+          '<path d="M30 30 Q60 4 90 30 L90 22 Q60 -4 30 22 Z" fill="#3b7a4a" stroke="#2a2440" stroke-width="3"/>' +
+          '<path d="M28 92 Q60 60 92 92 L92 120 L28 120 Z" fill="#c65b3c" stroke="#2a2440" stroke-width="3"/>' +
+          '<line x1="96" y1="26" x2="118" y2="118" stroke="#7a5230" stroke-width="3"/>' +
+          '<circle cx="52" cy="40" r="3" fill="#2a2440"/><circle cx="68" cy="40" r="3" fill="#2a2440"/>' +
+          '<path d="M52 52 Q60 58 68 52" stroke="#2a2440" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>';
+      }
+      const BUBBLES = [
+        { left: "8%", size: 10, delay: "0s", dur: "7s" }, { left: "22%", size: 6, delay: "1.4s", dur: "9s" },
+        { left: "38%", size: 14, delay: "3s", dur: "6.5s" }, { left: "55%", size: 8, delay: "0.7s", dur: "8.5s" },
+        { left: "68%", size: 5, delay: "2.2s", dur: "10s" }, { left: "81%", size: 12, delay: "4s", dur: "7.5s" },
+        { left: "92%", size: 7, delay: "1s", dur: "9.5s" },
+      ];
+      const WEEDS = [
+        { left: "4%", h: 130, hue: "#1f7a5a", delay: "0s" }, { left: "16%", h: 90, hue: "#2a9d6f", delay: "0.6s" },
+        { left: "84%", h: 110, hue: "#1f7a5a", delay: "0.3s" }, { left: "95%", h: 150, hue: "#2a9d6f", delay: "0.9s" },
+      ];
+      function sceneryHTML() {
+        let h = '<div class="scenery"><div class="rays"></div>';
+        for (const b of BUBBLES) h += '<span class="bubble" style="left:' + b.left + ';width:' + b.size + 'px;height:' + b.size + 'px;animation-delay:' + b.delay + ';animation-duration:' + b.dur + '"></span>';
+        for (const w of WEEDS) {
+          h += '<div class="weed" style="left:' + w.left + ';animation-delay:' + w.delay + '">' +
+            '<svg width="34" height="' + w.h + '" viewBox="0 0 34 ' + w.h + '"><path d="M17 ' + w.h + ' C4 ' + (w.h*0.7) + ' 30 ' + (w.h*0.45) + ' 15 ' + (w.h*0.28) + ' C6 ' + (w.h*0.16) + ' 24 ' + (w.h*0.08) + ' 17 0" fill="none" stroke="' + w.hue + '" stroke-width="7" stroke-linecap="round" opacity="0.75"/></svg></div>';
+        }
+        h += '<div class="floor"></div></div>';
+        return h;
+      }
+
+      // ---------------------------------------------------------------------
+      // Typewriter dialog.
+      // ---------------------------------------------------------------------
+      let typeTimer = null;
+      function typewriter(el, text) {
+        if (typeTimer) clearInterval(typeTimer);
+        const target = el.querySelector(".dtext");
+        if (!target) return;
+        let i = 0;
+        target.innerHTML = '<span class="dshown"></span><span class="caret">▎</span>';
+        const shown = target.querySelector(".dshown");
+        typeTimer = setInterval(() => {
+          i++; shown.textContent = text.slice(0, i);
+          if (i >= text.length) { clearInterval(typeTimer); typeTimer = null; }
+        }, 18);
+      }
+
+      // ---------------------------------------------------------------------
+      // Render.
+      // ---------------------------------------------------------------------
+      const app = document.getElementById("app");
+
+      function render() {
+        if (S.phase === "start") return renderStart();
+        if (S.phase === "playing") return renderPlay();
+        if (S.phase === "boss") return renderBoss();
+        if (S.phase === "gameover") return renderOver();
+      }
+
+      function renderStart() {
+        app.innerHTML =
+          '<div class="screen title">' + sceneryHTML() +
+            '<div class="center-col">' +
+              '<h1 class="logo">NIBBLE</h1>' +
+              '<p class="lede">You\'re a little fish in a big, hungry sea. Eat worms to stay full — but watch out: some are <span class="sus">sus</span> and hide a hook. Eat enough and you\'ll grow strange new powers.</p>' +
+              fishSVG(140, false) +
+              '<div class="rules">' +
+                '<span>💀 Let your fullness hit zero and you <b>starve</b>.</span>' +
+                '<span>🪝 Bite a hooked worm and you\'re <b>reeled up</b>.</span>' +
+                '<span>🎣 Every 10 worms, <b>Jordan the Fisherman</b> comes calling.</span>' +
+              '</div>' +
+              '<button class="big" id="startBtn">Dive in</button>' +
+            '</div>' +
+          '</div>';
+        document.getElementById("startBtn").onclick = startGame;
+      }
+
+      function renderPlay() {
+        const revealHooks = S.abilities.includes("hookSense");
+        const selected = S.worms.find((w) => w.uid === S.inspecting) || null;
+
+        let wormsHTML = "";
+        for (const w of S.worms) {
+          const danger = revealHooks && w.hooked;
+          const sel = w.uid === S.inspecting ? " sel" : "";
+          wormsHTML +=
+            '<button class="worm' + sel + '" data-uid="' + w.uid + '" style="left:' + w.x + '%;top:' + w.y + '%" aria-label="worm: ' + w.bait.name + '">' +
+              '<div class="wig" style="animation-delay:' + w.phase + 's">' + wormSVG(w, danger) + '</div>' +
+              (danger ? '<span class="warn">!</span>' : "") +
+            '</button>';
+        }
+
+        const actionsHTML = selected
+          ? '<div class="actions"><button class="eat" id="eatBtn">Eat</button><button class="leave" id="leaveBtn">Leave it</button></div>'
+          : "";
+
+        app.innerHTML =
+          '<div class="play">' +
+            '<div class="hud-wrap"><div class="hud" id="hud"></div></div>' +
+            '<div class="pond-area">' + sceneryHTML() +
+              '<div class="fish" id="fish">' + fishSVG(120, false) + '</div>' +
+              wormsHTML +
+            '</div>' +
+            '<div class="dialog"><p class="dtext"></p>' + actionsHTML + '</div>' +
+          '</div>';
+
+        renderHud();
+        document.querySelectorAll(".worm").forEach((b) => {
+          b.onclick = () => inspectWorm(b.getAttribute("data-uid"));
+        });
+        if (selected) {
+          document.getElementById("eatBtn").onclick = () => chompThen(() => eatWorm(selected.uid));
+          document.getElementById("leaveBtn").onclick = () => leaveWorm(selected.uid);
+        }
+        typewriter(app, selected ? selected.bait.flavor : S.message);
+      }
+
+      // brief chomp before eating resolves
+      function chompThen(fn) {
+        const fish = document.getElementById("fish");
+        if (fish) fish.innerHTML = fishSVG(120, true);
+        setTimeout(fn, 180);
+      }
+
+      function renderHud() {
+        const hud = document.getElementById("hud");
+        if (!hud) return;
+        const pct = Math.max(0, Math.min(100, (S.hunger / S.hungerMax) * 100));
+        const fillClass = pct > 55 ? "fill-hi" : pct > 25 ? "fill-mid" : "fill-lo";
+        const toBoss = CONFIG.wormsPerBoss - (S.wormsEaten % CONFIG.wormsPerBoss);
+        let powers = S.abilities.length === 0 ? '<span class="none">no powers yet</span>' : "";
+        for (const id of S.abilities) {
+          const a = ABILITY_BY_ID[id];
+          powers += '<div class="badge" title="' + a.name + ' — ' + a.description + '">' + a.icon + '</div>';
+        }
+        hud.innerHTML =
+          '<div class="meter"><div class="lbl"><span>Fullness</span><span>' + Math.round(S.hunger) + ' / ' + S.hungerMax + '</span></div>' +
+            '<div class="bar"><span class="' + fillClass + '" style="width:' + pct + '%"></span></div></div>' +
+          '<div class="count"><div class="n">' + S.wormsEaten + '</div><div class="c">worms eaten · ' + toBoss + ' to Jordan</div></div>' +
+          '<div class="powers">' + powers + '</div>';
+      }
+
+      function renderBoss() {
+        const round = Math.floor(S.wormsEaten / 10);
+        const quote = round <= 1
+          ? "“Well, well. That's a plump little fish. I'll be seeing you again.”"
+          : "“Still wriggling, are we? Round " + round + ". One of these worms has your name on it.”";
+        app.innerHTML =
+          '<div class="screen boss"><div class="center-col">' +
+            jordanSVG() +
+            '<h2 class="big boss-name">Jordan the Fisherman</h2>' +
+            '<p class="boss-quote">' + quote + '</p>' +
+            '<p class="hint">(The full showdown is coming soon — for now, Jordan just sizes you up.)</p>' +
+            '<button class="big red" id="swimBtn">Swim on</button>' +
+          '</div></div>';
+        document.getElementById("swimBtn").onclick = advancePastBoss;
+      }
+
+      function renderOver() {
+        const hooked = S.deathCause === "hooked";
+        app.innerHTML =
+          '<div class="screen over"><div class="center-col">' +
+            '<div class="big-emoji">' + (hooked ? "🪝" : "💀") + '</div>' +
+            '<h2 class="big over-title">' + (hooked ? "Hooked!" : "Starved") + '</h2>' +
+            '<p class="death-msg mono">' + S.message + '</p>' +
+            '<div class="stat-box"><div class="n">' + S.wormsEaten + '</div><div class="c">worms eaten this life</div></div>' +
+            '<button class="big cyan" id="retryBtn">Try again</button>' +
+          '</div></div>';
+        document.getElementById("retryBtn").onclick = restart;
+      }
+
+      render();
+    </script>
+  </body>
+</html>
