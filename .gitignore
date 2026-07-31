@@ -12,5 +12,7 @@ dist-ssr
 *.xlsx
 *.xls
 !src/**/*.sample.*
-data/
-uploads/
+# Anchored to the repo root so proprietary data drops are ignored, but
+# source directories named "data" (e.g. src/game/data) are still tracked.
+/data/
+/uploads/

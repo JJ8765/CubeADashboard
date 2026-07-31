@@ -16,6 +16,36 @@ export default {
       fontFamily: {
         mono: ["ui-monospace", "SF Mono", "JetBrains Mono", "Menlo", "monospace"],
       },
+      keyframes: {
+        fishbob: {
+          "0%, 100%": { transform: "translateY(0) rotate(-1deg)" },
+          "50%": { transform: "translateY(-8px) rotate(1deg)" },
+        },
+        wormwiggle: {
+          "0%, 100%": { transform: "rotate(-6deg)" },
+          "50%": { transform: "rotate(6deg)" },
+        },
+        bubble: {
+          "0%": { transform: "translateY(0) scale(0.6)", opacity: "0" },
+          "20%": { opacity: "0.6" },
+          "100%": { transform: "translateY(-110vh) scale(1)", opacity: "0" },
+        },
+        sway: {
+          "0%, 100%": { transform: "rotate(-6deg)" },
+          "50%": { transform: "rotate(6deg)" },
+        },
+        sparkle: {
+          "0%, 100%": { opacity: "0.3" },
+          "50%": { opacity: "1" },
+        },
+      },
+      animation: {
+        fishbob: "fishbob 3s ease-in-out infinite",
+        wormwiggle: "wormwiggle 1.6s ease-in-out infinite",
+        bubble: "bubble 8s linear infinite",
+        sway: "sway 4s ease-in-out infinite",
+        sparkle: "sparkle 1.4s ease-in-out infinite",
+      },
     },
   },
   plugins: [],
